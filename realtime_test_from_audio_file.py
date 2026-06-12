@@ -1,5 +1,5 @@
 """
-Test vLLM Realtime STT bằng cách stream audio từ FILE (không cần micro).
+Test Qwen3-ASR Realtime STT bằng cách stream audio từ FILE (không cần micro).
 
 Cài đặt tối thiểu:
     pip install websockets librosa soundfile numpy
@@ -57,26 +57,20 @@ class StreamConfig:
 
 async def recv_transcript(ws) -> str:
     """Nhận transcript và in realtime ra console."""
-    collected: list[str] = []
+    current_text = ""
     async for raw in ws:
         event = json.loads(raw)
         t = event.get("type")
 
-        if t == "transcription.delta":
-            delta = event.get("delta", "")
-            if delta:
-                print(delta, end="", flush=True)
-                collected.append(delta)
+        if t == "transcription.updated":
+            current_text = event.get("text", "")
+            print(f"\rTranscription: {current_text}", end="", flush=True)
         elif t == "transcription.done":
-            text = event.get("text")
-            if text and not collected:
-                print(text, end="", flush=True)
-                return text
-            return "".join(collected)
+            return event.get("text", current_text)
         elif t == "error":
             raise RuntimeError(f"Realtime STT trả lỗi: {event.get('error', event)}")
 
-    return "".join(collected)
+    return current_text
 
 
 async def send_audio(ws, pcm16: bytes, cfg: StreamConfig) -> None:
@@ -124,7 +118,6 @@ async def main_async(args) -> int:
             await ws.send(json.dumps({"type": "session.update", "model": cfg.model}))
             await ws.send(json.dumps({"type": "input_audio_buffer.commit", "final": False}))
 
-            print("Transcription: ", end="", flush=True)
             receiver = asyncio.create_task(recv_transcript(ws))
             sender = asyncio.create_task(send_audio(ws, pcm16, cfg))
 
@@ -144,13 +137,13 @@ async def main_async(args) -> int:
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Stream audio file -> vLLM Realtime STT (/v1/realtime)")
+    p = argparse.ArgumentParser(description="Stream audio file -> Qwen3-ASR Realtime STT")
     p.add_argument("--audio_path", required=True, help="Đường dẫn file audio (mp3/wav/...).")
     p.add_argument("--host", default="localhost", help="Host (vd: localhost hoặc http(s)://...).")
     p.add_argument("--port", default=8000, type=int, help="Port server realtime.")
     p.add_argument(
         "--model",
-        default="mistralai/Voxtral-Mini-4B-Realtime-2602",
+        default="Qwen/Qwen3-ASR-0.6B",
         help="Model name giống server đang serve.",
     )
     p.add_argument(

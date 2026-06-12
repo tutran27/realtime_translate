@@ -1,5 +1,5 @@
 """
-Streamlit demo thu am micro va gui lien tuc toi vLLM Realtime STT.
+Streamlit demo thu am micro va gui lien tuc toi Qwen3-ASR Realtime STT.
 
 Cai dat:
     pip install streamlit streamlit-webrtc websockets av numpy
@@ -43,7 +43,7 @@ class RealtimeSTT:
     audio_queue: queue.Queue = field(
         default_factory=lambda: queue.Queue(maxsize=200)
     )
-    transcript_parts: list[str] = field(default_factory=list)
+    transcript: str = ""
     status: str = "Chua ket noi"
     error: str = ""
     running: bool = False
@@ -68,11 +68,11 @@ class RealtimeSTT:
 
     def clear_transcript(self) -> None:
         with self.lock:
-            self.transcript_parts.clear()
+            self.transcript = ""
 
     def get_transcript(self) -> str:
         with self.lock:
-            return "".join(self.transcript_parts)
+            return self.transcript
 
     def add_audio(self, pcm16_bytes: bytes) -> None:
         if self.running and pcm16_bytes:
@@ -161,16 +161,12 @@ class RealtimeSTT:
             event = json.loads(raw_message)
             event_type = event.get("type")
 
-            if event_type == "transcription.delta":
-                delta = event.get("delta", "")
-                if delta:
-                    with self.lock:
-                        self.transcript_parts.append(delta)
+            if event_type == "transcription.updated":
+                with self.lock:
+                    self.transcript = event.get("text", "")
             elif event_type == "transcription.done":
-                final_text = event.get("text")
-                if final_text and not self.get_transcript():
-                    with self.lock:
-                        self.transcript_parts.append(final_text)
+                with self.lock:
+                    self.transcript = event.get("text", self.transcript)
                 return
             elif event_type == "error":
                 error = event.get("error", event)
@@ -205,7 +201,7 @@ with st.sidebar:
     )
     model = st.text_input(
         "Model",
-        value="mistralai/Voxtral-Mini-4B-Realtime-2602",
+        value="Qwen/Qwen3-ASR-0.6B",
     )
 
 config = (host.strip(), int(port), model.strip())

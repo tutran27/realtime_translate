@@ -1,51 +1,36 @@
-import os
+import argparse
+from pathlib import Path
 
-import torch
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-from dotenv import load_dotenv
+from qwen_asr import Qwen3ASRModel
 
-load_dotenv()
 
-#  ----------- Config ----------- #
-HF_TOKEN = os.getenv("HF_TOKEN")
-model_id = "openai/whisper-large-v3-turbo"
-audio_path = "audio/shoes.mp3"
-# ------------------------------- #
+def parse_args():
+    parser = argparse.ArgumentParser(description="Qwen3-ASR offline transcription")
+    parser.add_argument("audio_path", nargs="?", default="audio/shoes.mp3")
+    parser.add_argument("--model", default="Qwen/Qwen3-ASR-0.6B")
+    parser.add_argument("--language", default=None)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.8)
+    return parser.parse_args()
 
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-print("Loading model...")
-model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    model_id, dtype=dtype, low_cpu_mem_usage=True, use_safetensors=True
-)
-model.to(device)
+def main() -> None:
+    args = parse_args()
+    audio_path = Path(args.audio_path)
+    if not audio_path.exists():
+        raise FileNotFoundError(f"Khong tim thay file audio: {audio_path}")
 
-print("Loading processor...")
-processor = AutoProcessor.from_pretrained(model_id)
-processor.tokenizer.clean_up_tokenization_spaces = False
-model.generation_config.forced_decoder_ids = None
-model.generation_config.suppress_tokens = None
-model.generation_config.begin_suppress_tokens = None
+    model = Qwen3ASRModel.LLM(
+        model=args.model,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        max_new_tokens=256,
+    )
+    result = model.transcribe(
+        audio=str(audio_path),
+        language=args.language,
+    )[0]
+    print(f"Language: {result.language}")
+    print(result.text)
 
-print("Loading pipeline...")
-pipe = pipeline(
-    "automatic-speech-recognition",
-    model=model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
-    dtype=dtype,
-    device=device,
-)
 
-if not os.path.exists(audio_path):
-    raise FileNotFoundError(f"Khong tim thay file audio: {audio_path}")
-
-print("Running pipeline...")
-
-result = pipe(
-    audio_path,
-    return_timestamps=True,
-    generate_kwargs={"task": "transcribe", "language": "vi"},
-)
-print(result["text"])
+if __name__ == "__main__":
+    main()
