@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎙️ Realtime STT — Qwen3-ASR</title>
+<style>
+  :root {
+    --bg: #0b0d13;
+    --bg2: #11141c;
+    --surface: #161a24;
+    --surface2: #1c2030;
+    --border: #252a38;
+    --primary: #7c6cf0;
+    --primary-dim: rgba(124,108,240,0.15);
+    --primary-glow: rgba(124,108,240,0.35);
+    --green: #22d3a2;
+    --green-dim: rgba(34,211,162,0.12);
+    --red: #f06c6c;
+    --red-dim: rgba(240,108,108,0.12);
+    --yellow: #e8c84a;
+    --text: #eef0f5;
+    --text2: #9ba2b8;
+    --text3: #5c6280;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --radius-xs: 6px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ═══ HEADER ═══ */
+  header {
+    height: 52px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 18px; gap: 10px; flex-shrink: 0;
+  }
+  header .logo {
+    width: 30px; height: 30px;
+    background: linear-gradient(135deg, var(--primary), #a78bfa);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  header h1 { font-size: 14px; font-weight: 600; }
+  header .badge {
+    font-size: 9px; font-weight: 700; padding: 2px 8px;
+    border-radius: 20px; background: var(--primary-dim);
+    color: var(--primary); border: 1px solid rgba(124,108,240,0.25);
+    letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  header .spacer { flex: 1; }
+  #headerStatus { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+  #headerStatus .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-idle { background: var(--text3); }
+  .dot-connecting { background: var(--yellow); animation: pulse-opacity 1.2s ease-in-out infinite; }
+  .dot-connected { background: var(--green); }
+  .dot-recording { background: var(--red); animation: pulse-opacity 0.8s ease-in-out infinite; }
+  .dot-error { background: var(--red); }
+  @keyframes pulse-opacity { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+  /* ═══ LAYOUT ═══ */
+  .layout { display: grid; grid-template-columns: 270px 1fr; height: calc(100% - 52px); }
+
+  /* ═══ SIDEBAR ═══ */
+  .sidebar {
+    background: var(--bg2); border-right: 1px solid var(--border);
+    overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .sidebar-section { padding: 16px 14px; border-bottom: 1px solid var(--border); }
+  .sidebar-section:last-child { border-bottom: none; }
+  .sidebar-section .section-title {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.4px; color: var(--text3); margin-bottom: 12px;
+  }
+  .field { margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 11px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
+  .field input, .field select {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-xs); color: var(--text); padding: 7px 9px;
+    font-size: 12px; outline: none; transition: border-color 0.15s; font-family: inherit;
+  }
+  .field input:focus, .field select:focus { border-color: var(--primary); }
+  .field input::placeholder { color: var(--text3); }
+  .field select { cursor: pointer; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* ═══ MAIN ═══ */
+  .main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+
+  .top-bar {
+    padding: 14px 20px 10px;
+    display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
+  }
+
+  /* ── Mic ── */
+  .mic-area {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 4px 0;
+  }
+  .mic-btn {
+    width: 68px; height: 68px; border-radius: 50%; border: none;
+    background: var(--surface2); color: var(--text2); font-size: 26px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; border: 2px solid var(--border);
+  }
+  .mic-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
+  .mic-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .mic-btn.recording {
+    background: var(--red-dim); border-color: var(--red); color: var(--red);
+    animation: mic-pulse 1.6s ease-out infinite;
+  }
+  @keyframes mic-pulse {
+    0%{box-shadow:0 0 0 0 rgba(240,108,108,0.45)}
+    65%{box-shadow:0 0 0 16px rgba(240,108,108,0)}
+    100%{box-shadow:0 0 0 0 rgba(240,108,108,0)}
+  }
+  .mic-sub { font-size: 10px; color: var(--text3); }
+  .mic-sub.recording { color: var(--red); }
+
+  /* ── Buttons ── */
+  .actions { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; border: none; border-radius: var(--radius-xs);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; font-family: inherit; white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-connect { background: var(--primary); color: #fff; box-shadow: 0 2px 12px var(--primary-glow); }
+  .btn-connect:hover:not(:disabled) { background: #8b7cf5; box-shadow: 0 4px 18px var(--primary-glow); transform: translateY(-1px); }
+  .btn-stop { background: var(--red-dim); color: var(--red); border: 1px solid rgba(240,108,108,0.2); }
+  .btn-stop:hover:not(:disabled) { background: rgba(240,108,108,0.2); }
+  .btn-ghost { background: var(--surface); color: var(--text2); border: 1px solid var(--border); }
+  .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text3); background: var(--surface2); }
+
+  /* ── Mode tabs ── */
+  .mode-tabs {
+    display: flex; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-xs); overflow: hidden; flex-shrink: 0;
+  }
+  .mode-tab {
+    flex: 1; padding: 8px 0; text-align: center; font-size: 11px; font-weight: 600;
+    color: var(--text3); cursor: pointer; transition: all 0.15s;
+    border: none; background: none; font-family: inherit;
+  }
+  .mode-tab.active { background: var(--primary-dim); color: var(--primary); }
+  .mode-tab:hover:not(.active) { color: var(--text2); }
+  .mode-tab + .mode-tab { border-left: 1px solid var(--border); }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius-sm);
+    padding: 24px 16px; text-align: center; cursor: pointer;
+    transition: all 0.15s; flex-shrink: 0; margin: 0 20px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--primary); background: var(--primary-dim);
+  }
+  .upload-zone .upload-icon { font-size: 28px; margin-bottom: 6px; }
+  .upload-zone .upload-text { font-size: 12px; color: var(--text2); margin-bottom: 3px; }
+  .upload-zone .upload-hint { font-size: 10px; color: var(--text3); }
+  .upload-zone input[type="file"] { display: none; }
+
+  /* ── Visualizer ── */
+  .viz-wrap { margin: 0 20px 2px; flex-shrink: 0; }
+  .viz-inner {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .viz-canvas-box {
+    flex: 1; height: 48px; background: var(--bg);
+    border-radius: var(--radius-xs); overflow: hidden; position: relative;
+  }
+  .viz-canvas-box canvas { width: 100%; height: 100%; display: block; }
+  .viz-db { font-size: 11px; font-weight: 600; color: var(--text2); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+
+  /* ── Transcript ── */
+  .transcript-grid {
+    flex: 1; min-height: 0; margin: 6px 20px 16px;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+  .transcript-wrap { min-height: 0; display: flex; flex-direction: column; }
+  .transcript-box {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; min-height: 0;
+  }
+  .transcript-head {
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .transcript-head .left { display: flex; align-items: center; gap: 7px; }
+  .transcript-head .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .transcript-head .dot-live.active { background: var(--green); box-shadow: 0 0 6px rgba(34,211,162,0.5); }
+  .transcript-head h3 { font-size: 11px; font-weight: 600; color: var(--text2); }
+  .transcript-head .char-count { font-size: 10px; color: var(--text3); font-variant-numeric: tabular-nums; }
+  .transcript-body { flex: 1; overflow-y: auto; padding: 14px; }
+  #transcriptText, #translationText {
+    width: 100%; min-height: 100%; background: transparent; border: none;
+    color: var(--text); font-size: 15px; line-height: 1.75; resize: none; outline: none; font-family: inherit;
+  }
+  #transcriptText::placeholder, #translationText::placeholder { color: var(--text3); font-style: italic; }
+
+  /* ── File info ── */
+  .file-info {
+    display: none; align-items: center; justify-content: space-between;
+    margin: 0 20px 4px; padding: 8px 12px; background: var(--green-dim);
+    border: 1px solid rgba(34,211,162,0.2); border-radius: var(--radius-xs); flex-shrink: 0;
+  }
+  .file-info.show { display: flex; }
+  .file-info .file-name { font-size: 11px; color: var(--green); }
+  .file-info .file-remove {
+    font-size: 11px; color: var(--text3); cursor: pointer;
+    background: none; border: none; font-family: inherit; padding: 2px 6px;
+  }
+  .file-info .file-remove:hover { color: var(--red); }
+
+  /* ── Progress bar ── */
+  .progress-bar { display: none; margin: 0 20px 4px; flex-shrink: 0; }
+  .progress-bar.show { display: block; }
+  .progress-bar .progress-track {
+    height: 3px; background: var(--surface); border-radius: 2px; overflow: hidden;
+  }
+  .progress-bar .progress-fill {
+    height: 100%; background: var(--primary); border-radius: 2px;
+    transition: width 0.3s ease; width: 0%;
+  }
+
+  /* ── Permission banner ── */
+  .perm-banner {
+    display: none; align-items: center; gap: 8px;
+    margin: 0 20px 4px; padding: 8px 12px;
+    background: rgba(232,200,74,0.1); border: 1px solid rgba(232,200,74,0.25);
+    border-radius: var(--radius-xs); flex-shrink: 0;
+  }
+  .perm-banner.show { display: flex; }
+  .perm-banner .perm-text { font-size: 11px; color: var(--yellow); flex: 1; }
+  .perm-banner .perm-btn {
+    font-size: 10px; font-weight: 600; padding: 4px 10px;
+    background: rgba(232,200,74,0.2); border: 1px solid rgba(232,200,74,0.3);
+    border-radius: 4px; color: var(--yellow); cursor: pointer; font-family: inherit;
+  }
+  .perm-banner .perm-btn:hover { background: rgba(232,200,74,0.3); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 18px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); padding: 9px 18px;
+    border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    opacity: 0; transition: all 0.3s ease; z-index: 200;
+    max-width: 420px; text-align: center;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.warn { border-color: var(--yellow); color: var(--yellow); }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .transcript-grid { grid-template-columns: 1fr; overflow-y: auto; }
+    .transcript-wrap { min-height: 260px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎙️</div>
+  <h1>Realtime STT</h1>
+  <span class="badge">Qwen3-ASR</span>
+  <div class="spacer"></div>
+  <div id="headerStatus">
+    <span class="dot dot-idle" id="statusDot"></span>
+    <span id="statusLabel">Sẵn sàng</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="section-title">Kết nối</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Host</label>
+          <input id="host" type="text" value="localhost">
+        </div>
+        <div class="field">
+          <label>Port</label>
+          <input id="port" type="number" value="8000" min="1" max="65535">
+        </div>
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <input id="model" type="text" value="Qwen/Qwen3-ASR-0.6B">
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-title">Ngôn ngữ & Ngữ cảnh</div>
+      <div class="field">
+        <label>Language</label>
+        <select id="language">
+          <option value="">🌐 Tự động</option>
+          <option value="Vietnamese">🇻🇳 Tiếng Việt</option>
+          <option value="English">🇬🇧 English</option>
+          <option value="Chinese">🇨🇳 中文</option>
+          <option value="Japanese">🇯🇵 日本語</option>
+          <option value="Korean">🇰🇷 한국어</option>
+          <option value="French">🇫🇷 Français</option>
+          <option value="German">🇩🇪 Deutsch</option>
+          <option value="Spanish">🇪🇸 Español</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Context hint</label>
+        <input id="context" type="text" placeholder="Gợi ý ngữ cảnh…">
+      </div>
+      <div class="field">
+        <label>Dịch sang</label>
+        <select id="translationTarget">
+          <option value="">Tắt dịch</option>
+          <option value="vie_Latn" selected>🇻🇳 Tiếng Việt</option>
+          <option value="eng_Latn">🇬🇧 English</option>
+        </select>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-title">Realtime TTS</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Bật TTS</label>
+          <select id="ttsEnabled">
+            <option value="true" selected>Bật</option>
+            <option value="false">Tắt</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Nguồn đọc</label>
+          <select id="ttsSource">
+            <option value="translation" selected>Bản dịch</option>
+            <option value="transcript">Transcript gốc</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Voice</label>
+        <select id="ttsVoice">
+          <option value="Bình An" selected>Bình An</option>
+        </select>
+      </div>
+      <div style="color:var(--text3);font-size:10px;line-height:1.5;">
+        Backend sẽ synth trực tiếp trong RAM và gửi audio WAV realtime để phát ngay trên trình duyệt.
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-title">Streaming</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Audio chunk</label>
+          <select id="audioChunkMs">
+            <option value="100" selected>100 ms</option>
+            <option value="128">128 ms</option>
+            <option value="256">256 ms</option>
+            <option value="500">500 ms</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tốc độ file</label>
+          <select id="fileSpeed">
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2.0x</option>
+          </select>
+        </div>
+      </div>
+      <div style="color:var(--text3);font-size:10px;line-height:1.5;">
+        Tốc độ chỉ áp dụng cho file upload. Microphone luôn chạy realtime.
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-title">Microphone</div>
+      <div class="field">
+        <label>Thiết bị</label>
+        <select id="micSelect"><option value="">Mặc định</option></select>
+      </div>
+      <div class="field">
+        <label style="color:var(--text3);font-size:10px;line-height:1.5;">
+          💡 Nếu mic không hoạt động, hãy mở file qua server:
+          <code style="background:var(--bg);padding:1px 5px;border-radius:3px;font-size:10px;">python -m http.server 7800</code>
+          rồi mở <code style="background:var(--bg);padding:1px 5px;border-radius:3px;font-size:10px;">http://localhost:7800/frontend/main.html</code>
+        </label>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-title">Phím tắt</div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:10px;color:var(--text2)">Bật / tắt mic</span>
+          <kbd style="font-size:10px;padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:inherit;">Space</kbd>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:10px;color:var(--text2)">Sao chép</span>
+          <kbd style="font-size:10px;padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:inherit;">Ctrl+C</kbd>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main">
+
+    <!-- Mode tabs -->
+    <div style="padding: 10px 20px 0;">
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="tabMic">🎤 Microphone</button>
+        <button class="mode-tab" id="tabFile">📁 Upload file</button>
+      </div>
+    </div>
+
+    <!-- ── MIC MODE ── -->
+    <div id="modeMic">
+      <div class="top-bar">
+        <div class="mic-area">
+          <button class="mic-btn" id="btnMic" disabled>🎤</button>
+          <span class="mic-sub" id="micSub">Kết nối STT trước</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn-connect" id="btnConnect">⚡ <span id="btnConnectText">Kết nối STT</span></button>
+          <button class="btn btn-stop" id="btnStop" disabled>⏹ Dừng</button>
+          <button class="btn btn-ghost" id="btnClear">🗑 Xóa</button>
+          <button class="btn btn-ghost" id="btnCopy">📋 Copy</button>
+        </div>
+      </div>
+
+      <!-- Permission banner -->
+      <div class="perm-banner" id="permBanner">
+        <span style="font-size:14px">⚠️</span>
+        <span class="perm-text" id="permText">Cần cấp quyền microphone. Nhấn nút bên phải để xin quyền.</span>
+        <button class="perm-btn" id="btnPerm">Cấp quyền mic</button>
+      </div>
+
+      <!-- Visualizer -->
+      <div class="viz-wrap">
+        <div class="viz-inner">
+          <div class="viz-canvas-box"><canvas id="vizCanvas"></canvas></div>
+          <span class="viz-db" id="vizDb">-- dB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── FILE MODE ── -->
+    <div id="modeFile" style="display:none;flex-direction:column;gap:0;">
+      <div class="top-bar" style="padding-bottom:4px;">
+        <div class="actions">
+          <button class="btn btn-connect" id="btnConnectFile">⚡ <span id="btnConnectFileText">Kết nối STT</span></button>
+          <button class="btn btn-stop" id="btnStopFile" disabled>⏹ Dừng</button>
+          <button class="btn btn-ghost" id="btnClearFile">🗑 Xóa</button>
+          <button class="btn btn-ghost" id="btnCopyFile">📋 Copy</button>
+        </div>
+      </div>
+
+      <!-- Upload zone -->
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">Kéo file audio vào đây hoặc nhấn để chọn</div>
+        <div class="upload-hint">Hỗ trợ: MP3, WAV, OGG, FLAC, M4A, WEBM</div>
+        <input type="file" id="fileInput" accept="audio/*">
+      </div>
+
+      <!-- File info -->
+      <div class="file-info" id="fileInfo">
+        <span class="file-name" id="fileName"></span>
+        <button class="file-remove" id="fileRemoveBtn">✕</button>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+
+      <!-- Visualizer for file -->
+      <div class="viz-wrap" style="margin-top:4px;">
+        <div class="viz-inner">
+          <div class="viz-canvas-box"><canvas id="vizCanvasFile"></canvas></div>
+          <span class="viz-db" id="vizDbFile">-- dB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Raw transcript and realtime translation ── -->
+    <div class="transcript-grid">
+      <div class="transcript-wrap">
+        <div class="transcript-box">
+          <div class="transcript-head">
+            <div class="left">
+              <span class="dot-live" id="liveDot"></span>
+              <h3>Raw transcript</h3>
+            </div>
+            <span class="char-count" id="charCount">0 ký tự</span>
+          </div>
+          <div class="transcript-body">
+            <textarea id="transcriptText" placeholder="Nội dung nhận dạng gốc sẽ hiển thị ở đây…" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="transcript-wrap">
+        <div class="transcript-box">
+          <div class="transcript-head">
+            <div class="left">
+              <span class="dot-live" id="translationDot"></span>
+              <h3>Realtime translation</h3>
+            </div>
+            <span class="char-count" id="translationCount">0 ký tự</span>
+          </div>
+          <div class="transcript-body">
+            <textarea id="translationText" placeholder="Bản dịch realtime theo từng câu sẽ hiển thị ở đây…" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ══════════════════════════════════════
+     DOM REFS
+     ══════════════════════════════════════ */
+  var $ = function(id) { return document.getElementById(id); };
+  var hostEl = $('host'), portEl = $('port'), modelEl = $('model');
+  var langEl = $('language'), ctxEl = $('context');
+  var translationTargetEl = $('translationTarget');
+  var ttsEnabledEl = $('ttsEnabled'), ttsSourceEl = $('ttsSource'), ttsVoiceEl = $('ttsVoice');
+  var audioChunkMsEl = $('audioChunkMs'), fileSpeedEl = $('fileSpeed');
+  var micSelectEl = $('micSelect');
+  var btnMic = $('btnMic'), btnConnect = $('btnConnect'), btnStop = $('btnStop');
+  var btnClear = $('btnClear'), btnCopy = $('btnCopy');
+  var btnConnectText = $('btnConnectText'), micSub = $('micSub');
+  var btnConnectFile = $('btnConnectFile'), btnStopFile = $('btnStopFile');
+  var btnClearFile = $('btnClearFile'), btnCopyFile = $('btnCopyFile');
+  var btnConnectFileText = $('btnConnectFileText');
+  var uploadZone = $('uploadZone'), fileInput = $('fileInput');
+  var fileInfo = $('fileInfo'), fileNameEl = $('fileName'), fileRemoveBtn = $('fileRemoveBtn');
+  var progressBar = $('progressBar'), progressFill = $('progressFill');
+  var statusDot = $('statusDot'), statusLabel = $('statusLabel');
+  var liveDot = $('liveDot');
+  var transcriptEl = $('transcriptText'), charCountEl = $('charCount');
+  var translationEl = $('translationText');
+  var translationCountEl = $('translationCount');
+  var translationDot = $('translationDot');
+  var vizCanvas = $('vizCanvas'), vizDbEl = $('vizDb');
+  var vizCanvasFile = $('vizCanvasFile'), vizDbFileEl = $('vizDbFile');
+  var toastEl = $('toast'), permBanner = $('permBanner'), permText = $('permText'), btnPerm = $('btnPerm');
+  var modeMicEl = $('modeMic'), modeFileEl = $('modeFile');
+  var tabMic = $('tabMic'), tabFile = $('tabFile');
+
+  /* ══════════════════════════════════════
+     STATE
+     ══════════════════════════════════════ */
+  var ws = null;
+  var audioCtx = null, mediaStream = null, analyser = null;
+  var audioSource = null, audioWorkletNode = null, silentGain = null;
+  var isRecording = false, isConnected = false;
+  var rafViz1 = null, rafViz2 = null;
+  var audioQueue = [], sending = false, drainTimer = null;
+  var ttsAudioCtx = null;
+  var ttsDecodeChain = Promise.resolve();
+  var ttsNextStartTime = 0;
+  var ttsScheduledSources = new Set();
+  var ttsPlaybackGeneration = 0;
+  var ttsPendingBuffers = [];
+  var ttsPendingDuration = 0;
+  var ttsBufferTimer = null;
+  var TTS_TARGET_BUFFER_SEC = 4.0;
+  var TTS_MAX_BUFFER_WAIT_MS = 3500;
+  var TTS_CROSSFADE_SEC = 0.025;
+  var currentMode = 'mic';
+  var currentFile = null;
+  var isPlaying = false;
+  var micPermissionGranted = false;
+  var TARGET_SR = 16000;
+  var MAX_AUDIO_QUEUE_CHUNKS = 50;
+  var MAX_WS_BUFFERED_BYTES = 512 * 1024;
+  var committedTranscript = '';
+  var partialTranscript = '';
+  var activeSegmentId = 0;
+  var translationSegments = {};
+
+  function ensureTtsAudioContext() {
+    if (!ttsAudioCtx) {
+      ttsAudioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        latencyHint: 'playback'
+      });
+    }
+    if (ttsAudioCtx.state === 'suspended') {
+      return ttsAudioCtx.resume().then(function() { return ttsAudioCtx; });
+    }
+    return Promise.resolve(ttsAudioCtx);
+  }
+
+  function stopTtsPlayback() {
+    ttsPlaybackGeneration += 1;
+    ttsScheduledSources.forEach(function(source) {
+      try { source.stop(); } catch (e) {}
+      try { source.disconnect(); } catch (e2) {}
+    });
+    ttsScheduledSources.clear();
+    ttsNextStartTime = 0;
+    ttsDecodeChain = Promise.resolve();
+    ttsPendingBuffers = [];
+    ttsPendingDuration = 0;
+    clearTimeout(ttsBufferTimer);
+    ttsBufferTimer = null;
+  }
+
+  function renderTtsVoices(voices, defaultVoice) {
+    var options = Array.isArray(voices) ? voices.slice() : [];
+    var currentVoice = ttsVoiceEl.value || defaultVoice || 'Bình An';
+    if (!options.length && defaultVoice) {
+      options.push({ label: defaultVoice, value: defaultVoice });
+    }
+    if (
+      currentVoice &&
+      !options.some(function(item) { return item && item.value === currentVoice; })
+    ) {
+      options.unshift({ label: currentVoice, value: currentVoice });
+    }
+    ttsVoiceEl.innerHTML = '';
+    options.forEach(function(item) {
+      if (!item || !item.value) return;
+      var option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.label || item.value;
+      if (item.value === currentVoice) option.selected = true;
+      ttsVoiceEl.appendChild(option);
+    });
+    if (!ttsVoiceEl.value && defaultVoice) {
+      ttsVoiceEl.value = defaultVoice;
+    }
+  }
+
+  function buildSessionPayload() {
+    var payload = {
+      type: 'session.update',
+      model: modelEl.value.trim() || 'Qwen/Qwen3-ASR-0.6B'
+    };
+    if (langEl.value.trim()) payload.language = langEl.value.trim();
+    if (ctxEl.value.trim()) payload.context = ctxEl.value.trim();
+    if (translationTargetEl.value) {
+      payload.translation_enabled = true;
+      payload.translation_target = translationTargetEl.value;
+    } else {
+      payload.translation_enabled = false;
+    }
+    payload.tts_enabled = ttsEnabledEl.value === 'true';
+    payload.tts_source = ttsSourceEl.value === 'transcript' ? 'transcript' : 'translation';
+    if (ttsVoiceEl.value.trim()) payload.tts_voice = ttsVoiceEl.value.trim();
+    return payload;
+  }
+
+  function getAudioChunkMs() {
+    var value = parseInt(audioChunkMsEl.value, 10);
+    return value > 0 ? value : 100;
+  }
+
+  function getFileSpeed() {
+    var value = parseFloat(fileSpeedEl.value);
+    return value > 0 ? value : 1;
+  }
+
+  /* ══════════════════════════════════════
+     TOAST
+     ══════════════════════════════════════ */
+  var toastTimer = null;
+  function showToast(msg, type, dur) {
+    type = type || '';
+    dur = dur || 3500;
+    toastEl.textContent = msg;
+    toastEl.className = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toastEl.classList.remove('show'); }, dur);
+  }
+
+  /* ══════════════════════════════════════
+     STATUS
+     ══════════════════════════════════════ */
+  function setStatus(state, label) {
+    statusDot.className = 'dot dot-' + state;
+    statusLabel.textContent = label;
+  }
+
+  /* ══════════════════════════════════════
+     CHAR COUNT
+     ══════════════════════════════════════ */
+  function updateCount() {
+    charCountEl.textContent = transcriptEl.value.length.toLocaleString() + ' ký tự';
+  }
+
+  function joinTranscript(left, right) {
+    left = (left || '').trim();
+    right = (right || '').trim();
+    if (!left) return right;
+    if (!right) return left;
+    return left + ' ' + right;
+  }
+
+  function renderTranscript() {
+    transcriptEl.value = joinTranscript(
+      committedTranscript,
+      partialTranscript
+    );
+    updateCount();
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function clearTranscript() {
+    committedTranscript = '';
+    partialTranscript = '';
+    activeSegmentId = 0;
+    translationSegments = {};
+    stopTtsPlayback();
+    translationEl.value = '';
+    translationCountEl.textContent = '0 ký tự';
+    translationDot.classList.remove('active');
+    renderTranscript();
+  }
+
+  function renderTranslation() {
+    var ids = Object.keys(translationSegments)
+      .map(Number)
+      .sort(function(a, b) { return a - b; });
+    translationEl.value = ids
+      .map(function(id) { return translationSegments[id]; })
+      .filter(Boolean)
+      .join(' ');
+    translationCountEl.textContent =
+      translationEl.value.length.toLocaleString() + ' ký tự';
+    translationEl.scrollTop = translationEl.scrollHeight;
+  }
+
+  function decodeBase64ToArrayBuffer(base64) {
+    var binary = atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  function scheduleTtsBuffer(ctx, buffer) {
+    var source = ctx.createBufferSource();
+    var gain = ctx.createGain();
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(ctx.destination);
+
+    var hasScheduledAudio = ttsNextStartTime > ctx.currentTime + 0.04;
+    var overlap = hasScheduledAudio ? TTS_CROSSFADE_SEC : 0;
+    var startAt = Math.max(
+      ctx.currentTime + 0.06,
+      hasScheduledAudio ? ttsNextStartTime - overlap : 0
+    );
+    var endAt = startAt + buffer.duration;
+    var fadeDuration = Math.min(TTS_CROSSFADE_SEC, buffer.duration / 4);
+    gain.gain.setValueAtTime(overlap ? 0 : 1, startAt);
+    if (overlap) {
+      gain.gain.linearRampToValueAtTime(1, startAt + fadeDuration);
+    }
+    if (fadeDuration > 0) {
+      gain.gain.setValueAtTime(1, Math.max(startAt, endAt - fadeDuration));
+      gain.gain.linearRampToValueAtTime(0, endAt);
+    }
+    ttsNextStartTime = endAt;
+    ttsScheduledSources.add(source);
+    source.onended = function() {
+      ttsScheduledSources.delete(source);
+      try { source.disconnect(); } catch (e) {}
+      try { gain.disconnect(); } catch (e2) {}
+      if (!ttsScheduledSources.size && ctx.currentTime >= ttsNextStartTime) {
+        ttsNextStartTime = 0;
+      }
+    };
+    source.start(startAt);
+  }
+
+  function drainTtsBuffers(ctx) {
+    clearTimeout(ttsBufferTimer);
+    ttsBufferTimer = null;
+    while (ttsPendingBuffers.length) {
+      scheduleTtsBuffer(ctx, ttsPendingBuffers.shift());
+    }
+    ttsPendingDuration = 0;
+  }
+
+  function maybeStartTtsPlayback(ctx, force) {
+    if (!ttsPendingBuffers.length) return;
+
+    var playbackActive = ttsNextStartTime > ctx.currentTime + 0.04;
+    if (playbackActive || force || ttsPendingDuration >= TTS_TARGET_BUFFER_SEC) {
+      drainTtsBuffers(ctx);
+      return;
+    }
+
+    if (!ttsBufferTimer) {
+      var generation = ttsPlaybackGeneration;
+      ttsBufferTimer = setTimeout(function() {
+        ttsBufferTimer = null;
+        if (generation !== ttsPlaybackGeneration) return;
+        ensureTtsAudioContext().then(function(activeCtx) {
+          if (generation !== ttsPlaybackGeneration) return;
+          drainTtsBuffers(activeCtx);
+        }).catch(function(err) {
+          showToast('KhÃ´ng pháº£t Ä‘Æ°á»£c TTS: ' + err.message, 'error');
+        });
+      }, TTS_MAX_BUFFER_WAIT_MS);
+    }
+  }
+
+  function flushTtsPlayback() {
+    var generation = ttsPlaybackGeneration;
+    ttsDecodeChain = ttsDecodeChain.then(function() {
+      return ensureTtsAudioContext();
+    }).then(function(ctx) {
+      if (generation !== ttsPlaybackGeneration) return;
+      maybeStartTtsPlayback(ctx, true);
+    });
+  }
+
+  function enqueueTtsAudio(ev) {
+    if (!ev.audio || ttsEnabledEl.value !== 'true') return;
+    var arrayBuffer = decodeBase64ToArrayBuffer(ev.audio);
+    var generation = ttsPlaybackGeneration;
+    ttsDecodeChain = ttsDecodeChain.then(function() {
+      return ensureTtsAudioContext();
+    }).then(function(ctx) {
+      return ctx.decodeAudioData(arrayBuffer.slice(0)).then(function(buffer) {
+        if (generation !== ttsPlaybackGeneration) return;
+        ttsPendingBuffers.push(buffer);
+        ttsPendingDuration += buffer.duration;
+        maybeStartTtsPlayback(ctx, false);
+      });
+    }).catch(function(err) {
+      showToast('Không phát được TTS: ' + err.message, 'error');
+    });
+  }
+
+  /* ══════════════════════════════════════
+     WS URL
+     ══════════════════════════════════════ */
+  function wsUrl() {
+    var h = hostEl.value.trim() || 'localhost';
+    var p = parseInt(portEl.value) || 8000;
+    var proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+    return proto + '://' + h + ':' + p + '/v1/realtime';
+  }
+
+  /* ══════════════════════════════════════
+     MODE SWITCHING
+     ══════════════════════════════════════ */
+  function switchMode(mode) {
+    currentMode = mode;
+    if (mode === 'mic') {
+      modeMicEl.style.display = 'flex';
+      modeMicEl.style.flexDirection = 'column';
+      modeFileEl.style.display = 'none';
+      tabMic.classList.add('active');
+      tabFile.classList.remove('active');
+    } else {
+      modeMicEl.style.display = 'none';
+      modeFileEl.style.display = 'flex';
+      modeFileEl.style.flexDirection = 'column';
+      tabMic.classList.remove('active');
+      tabFile.classList.add('active');
+    }
+  }
+  tabMic.addEventListener('click', function() { switchMode('mic'); });
+  tabFile.addEventListener('click', function() { switchMode('file'); });
+
+  /* ══════════════════════════════════════
+     MIC PERMISSION
+     ══════════════════════════════════════ */
+  function requestMicPermission() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return Promise.reject(new Error('Microphone chỉ hoạt động trên HTTPS hoặc localhost.'));
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      micPermissionGranted = true;
+      permBanner.classList.remove('show');
+      showToast('Đã cấp quyền microphone!', 'success');
+      return enumMics();
+    }).catch(function(e) {
+      permBanner.classList.add('show');
+      permText.textContent = 'Không thể truy cập mic: ' + e.message;
+      showToast('Mic error: ' + e.message, 'error');
+      throw e;
+    });
+  }
+  btnPerm.addEventListener('click', requestMicPermission);
+
+  /* ══════════════════════════════════════
+     ENUMERATE MICS
+     ══════════════════════════════════════ */
+  function enumMics() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      return Promise.resolve();
+    }
+    return navigator.mediaDevices.enumerateDevices().then(function(devs) {
+      micSelectEl.innerHTML = '';
+      var i = 0;
+      devs.forEach(function(d) {
+        if (d.kind === 'audioinput') {
+          var o = document.createElement('option');
+          o.value = d.deviceId;
+          o.textContent = d.label || ('Microphone ' + (++i));
+          micSelectEl.appendChild(o);
+        }
+      });
+    }).catch(function() {});
+  }
+  enumMics();
+
+  /* ══════════════════════════════════════
+     VISUALIZER — independent per canvas
+     ══════════════════════════════════════ */
+  function setupViz(canvas, dbEl) {
+    var raf = null;
+
+    function resize() {
+      var rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function draw() {
+      var w = canvas.width, h = canvas.height;
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+
+      if (analyser) {
+        var len = analyser.frequencyBinCount;
+        var data = new Uint8Array(len);
+        analyser.getByteTimeDomainData(data);
+
+        var sum = 0;
+        for (var i = 0; i < len; i++) {
+          var v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        dbEl.textContent = Math.round(20 * Math.log10(Math.max(Math.sqrt(sum / len), 1e-6))) + ' dB';
+
+        ctx.beginPath();
+        ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+        var grad = ctx.createLinearGradient(0, 0, w, 0);
+        grad.addColorStop(0, '#7c6cf0');
+        grad.addColorStop(1, '#a78bfa');
+        ctx.strokeStyle = grad;
+        var sw = w / len;
+        for (var j = 0; j < len; j++) {
+          var y = ((data[j] - 128) / 128 * 0.5 + 0.5) * h;
+          if (j === 0) ctx.moveTo(0, y); else ctx.lineTo(j * sw, y);
+        }
+        ctx.stroke();
+      } else {
+        dbEl.textContent = '-- dB';
+        ctx.beginPath();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(124,108,240,0.1)';
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+  }
+  setupViz(vizCanvas, vizDbEl);
+  setupViz(vizCanvasFile, vizDbFileEl);
+
+  /* ══════════════════════════════════════
+     MIC AUDIO PIPELINE
+     ══════════════════════════════════════ */
+  function getAudioWorkletUrl() {
+    if (
+      typeof chrome !== 'undefined' &&
+      chrome.runtime &&
+      chrome.runtime.getURL
+    ) {
+      return chrome.runtime.getURL('audio-worklet.js');
+    }
+    return 'audio-worklet.js';
+  }
+
+  function enqueueAudio(chunk) {
+    if (!chunk || !chunk.byteLength) return;
+    if (audioQueue.length >= MAX_AUDIO_QUEUE_CHUNKS) {
+      audioQueue.shift();
+      showToast('Backend xử lý chậm, đã bỏ một audio chunk cũ.', 'warn', 1800);
+    }
+    audioQueue.push(new Uint8Array(chunk));
+    drainQueue();
+  }
+
+  function startMicAudio() {
+    var chunkMs = getAudioChunkMs();
+    var constraints = micSelectEl.value
+      ? { audio: { deviceId: { exact: micSelectEl.value }, echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }
+      : { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } };
+
+    return navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+      mediaStream = stream;
+      audioCtx = new AudioContext({ latencyHint: 'interactive' });
+      audioSource = audioCtx.createMediaStreamSource(mediaStream);
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      audioSource.connect(analyser);
+
+      return audioCtx.audioWorklet.addModule(getAudioWorkletUrl()).then(function() {
+        audioWorkletNode = new AudioWorkletNode(audioCtx, 'pcm16-resampler', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          processorOptions: {
+            targetRate: TARGET_SR,
+            chunkSamples: Math.round(TARGET_SR * chunkMs / 1000)
+          }
+        });
+        silentGain = audioCtx.createGain();
+        silentGain.gain.value = 0;
+        audioWorkletNode.port.onmessage = function(event) {
+          if (event.data && event.data.type === 'pcm') enqueueAudio(event.data.buffer);
+        };
+        audioSource.connect(audioWorkletNode);
+        audioWorkletNode.connect(silentGain);
+        silentGain.connect(audioCtx.destination);
+        return audioCtx.resume();
+      });
+    });
+  }
+
+  function stopMicAudio() {
+    if (audioWorkletNode) {
+      audioWorkletNode.disconnect();
+      audioWorkletNode.port.onmessage = null;
+      audioWorkletNode = null;
+    }
+    if (audioSource) { audioSource.disconnect(); audioSource = null; }
+    if (silentGain) { silentGain.disconnect(); silentGain = null; }
+    if (mediaStream) { mediaStream.getTracks().forEach(function(t) { t.stop(); }); mediaStream = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    analyser = null;
+  }
+
+  /* ══════════════════════════════════════
+     FILE UPLOAD & PLAYBACK
+     ══════════════════════════════════════ */
+  uploadZone.addEventListener('click', function() { fileInput.click(); });
+  uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', function() { uploadZone.classList.remove('drag-over'); });
+  uploadZone.addEventListener('drop', function(e) {
+    e.preventDefault(); uploadZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', function(e) {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+  fileRemoveBtn.addEventListener('click', removeFile);
+
+  function handleFile(file) {
+    var validExts = ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.webm'];
+    var ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (validExts.indexOf(ext) === -1) {
+      showToast('File không đúng định dạng. Hỗ trợ: MP3, WAV, OGG, FLAC, M4A, WEBM', 'error');
+      return;
+    }
+    currentFile = file;
+    fileNameEl.textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
+    fileInfo.classList.add('show');
+    uploadZone.style.display = 'none';
+    showToast('Đã chọn: ' + file.name, 'success');
+
+    // Auto-play if already connected
+    if (isConnected && ws && ws.readyState === WebSocket.OPEN) {
+      playFileAndStream();
+    }
+  }
+
+  function removeFile() {
+    currentFile = null;
+    fileInfo.classList.remove('show');
+    uploadZone.style.display = 'block';
+    fileInput.value = '';
+    progressBar.classList.remove('show');
+    progressFill.style.width = '0%';
+  }
+
+  function resampleBuffer(buffer, fromRate, toRate) {
+    var ratio = fromRate / toRate;
+    var newLen = Math.floor(buffer.length / ratio);
+    var result = new Float32Array(newLen);
+    for (var i = 0; i < newLen; i++) {
+      var idx = i * ratio;
+      var lo = Math.floor(idx);
+      var hi = Math.min(lo + 1, buffer.length - 1);
+      var frac = idx - lo;
+      result[i] = buffer[lo] * (1 - frac) + buffer[hi] * frac;
+    }
+    return result;
+  }
+
+  function playFileAndStream() {
+    if (!currentFile || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    var file = currentFile; // capture ref
+
+    file.arrayBuffer().then(function(arrayBuf) {
+      if (!audioCtx) audioCtx = new AudioContext({ sampleRate: TARGET_SR });
+      return audioCtx.decodeAudioData(arrayBuf);
+    }).then(function(decoded) {
+      if (currentFile !== file) return; // file changed
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+
+      var rawData = decoded.getChannelData(0);
+      var resampled = decoded.sampleRate !== TARGET_SR
+        ? resampleBuffer(rawData, decoded.sampleRate, TARGET_SR)
+        : rawData;
+
+      var pcm = new Int16Array(resampled.length);
+      for (var i = 0; i < resampled.length; i++) {
+        var s = Math.max(-1, Math.min(1, resampled[i]));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+
+      isPlaying = true;
+      liveDot.classList.add('active');
+      progressBar.classList.add('show');
+      var chunkMs = getAudioChunkMs();
+      var fileSpeed = getFileSpeed();
+      setStatus(
+        'recording',
+        'Đang phát file (' + chunkMs + ' ms, ' + fileSpeed + 'x)…'
+      );
+
+      var chunkSize = Math.round(TARGET_SR * chunkMs / 1000) * 2;
+      var sendIntervalMs = chunkMs / fileSpeed;
+      var offset = 0;
+      var totalBytes = pcm.buffer.byteLength;
+      var aborted = false;
+
+      function sendNext() {
+        if (!isPlaying || currentFile !== file) { aborted = true; return; }
+        if (offset >= totalBytes) return;
+
+        var end = Math.min(offset + chunkSize, totalBytes);
+        var chunk = new Uint8Array(pcm.buffer, offset, end - offset);
+        ws.send(chunk);
+        offset = end;
+        progressFill.style.width = Math.round((offset / totalBytes) * 100) + '%';
+
+        setTimeout(sendNext, sendIntervalMs);
+      }
+      sendNext();
+
+      // Wait for completion
+      var checkDone = setInterval(function() {
+        if (aborted || !isPlaying) {
+          clearInterval(checkDone);
+          return;
+        }
+        if (offset >= totalBytes) {
+          clearInterval(checkDone);
+          if (isPlaying && currentFile === file) {
+            ws.send(JSON.stringify({ type: 'input_audio_buffer.commit', final: true }));
+            setStatus('connected', 'Đã phát xong file');
+            showToast('Đã phát xong file!', 'success');
+          }
+          isPlaying = false;
+          liveDot.classList.remove('active');
+        }
+      }, 200);
+
+    }).catch(function(e) {
+      showToast('Lỗi phát file: ' + e.message, 'error');
+      setStatus('error', 'Lỗi phát file');
+      isPlaying = false;
+      liveDot.classList.remove('active');
+    });
+  }
+
+  /* ══════════════════════════════════════
+     WEBSOCKET
+     ══════════════════════════════════════ */
+  function doConnect(mode) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      showToast('Đã kết nối rồi!', 'warn');
+      return;
+    }
+
+    setStatus('connecting', 'Đang kết nối…');
+
+    try {
+      ws = new WebSocket(wsUrl());
+    } catch (e) {
+      setStatus('error', 'Lỗi kết nối');
+      showToast(e.message, 'error');
+      return;
+    }
+
+    var sessionReady = false;
+
+    ws.onopen = function() {
+      isConnected = true;
+      setStatus('connected', 'Đã kết nối');
+
+      if (mode === 'mic') {
+        btnConnect.disabled = true;
+        btnStop.disabled = false;
+        btnMic.disabled = false;
+        btnConnectText.textContent = 'Đã kết nối';
+        micSub.textContent = 'Nhấn 🎤 hoặc Space để nói';
+      } else {
+        btnConnectFile.disabled = true;
+        btnStopFile.disabled = false;
+        btnConnectFileText.textContent = 'Đã kết nối';
+        if (!currentFile) {
+          showToast('Chọn file audio để bắt đầu', 'warn');
+        }
+      }
+    };
+
+    ws.onmessage = function(e) {
+      if (!sessionReady) {
+        // Intercept session.created
+        try {
+          var ev = JSON.parse(e.data);
+          if (ev.type === 'session.created') {
+            sessionReady = true;
+            if (ev.tts) {
+              renderTtsVoices(ev.tts.voices, ev.tts.default_voice);
+              if (!ev.tts.enabled) {
+                ttsEnabledEl.value = 'false';
+              }
+            }
+            var payload = buildSessionPayload();
+            ws.send(JSON.stringify(payload));
+            ws.send(JSON.stringify({ type: 'input_audio_buffer.commit', final: false }));
+            if (mode === 'file' && currentFile) {
+              playFileAndStream();
+            }
+            return;
+          }
+          if (ev.type === 'error') {
+            setStatus('error', 'Lỗi session');
+            showToast(ev.error?.message || 'Session error', 'error');
+            return;
+          }
+        } catch (err) {}
+      }
+      // Normal message handling
+      handleEvent(JSON.parse(e.data));
+    };
+
+    ws.onerror = function() {
+      setStatus('error', 'Lỗi kết nối');
+      showToast('WebSocket error', 'error');
+    };
+
+    ws.onclose = function(e) {
+      var wasConnected = isConnected;
+      isConnected = false;
+      if (isRecording) {
+        isRecording = false;
+        stopMicAudio();
+        audioQueue = [];
+      }
+      isPlaying = false;
+      stopTtsPlayback();
+      setStatus('idle', 'Đã ngắt kết nối');
+      btnConnect.disabled = false; btnStop.disabled = true;
+      btnMic.disabled = true; btnMic.classList.remove('recording');
+      btnConnectFile.disabled = false; btnStopFile.disabled = true;
+      micSub.textContent = 'Kết nối STT trước';
+      btnConnectText.textContent = 'Kết nối STT';
+      btnConnectFileText.textContent = 'Kết nối STT';
+      liveDot.classList.remove('active');
+      if (wasConnected && e.code !== 1000) {
+        showToast('Kết nối đóng (code: ' + e.code + ')', 'error');
+      }
+    };
+  }
+
+  function handleEvent(ev) {
+    if (!ev) return;
+    switch (ev.type) {
+      case 'transcription.updated':
+        var segmentId = Number.isInteger(ev.segment_id)
+          ? ev.segment_id
+          : activeSegmentId;
+        if (segmentId !== activeSegmentId) {
+          activeSegmentId = segmentId;
+          partialTranscript = '';
+        }
+        var replaceFrom = Number.isInteger(ev.replace_from)
+          ? ev.replace_from
+          : partialTranscript.length;
+        replaceFrom = Math.max(
+          0,
+          Math.min(replaceFrom, partialTranscript.length)
+        );
+        partialTranscript =
+          partialTranscript.slice(0, replaceFrom) + (ev.text || '');
+        renderTranscript();
+        break;
+      case 'transcription.segment.done':
+        var completedSegmentId = Number.isInteger(ev.segment_id)
+          ? ev.segment_id
+          : activeSegmentId;
+        if (completedSegmentId === activeSegmentId) {
+          committedTranscript = joinTranscript(
+            committedTranscript,
+            ev.text || partialTranscript
+          );
+          partialTranscript = '';
+          activeSegmentId = completedSegmentId + 1;
+          renderTranscript();
+        }
+        break;
+      case 'translation.segment.done':
+        translationSegments[ev.segment_id] = ev.text || '';
+        translationDot.classList.add('active');
+        renderTranslation();
+        break;
+      case 'translation.segment.error':
+        var translationError = ev.error && ev.error.message
+          ? ev.error.message
+          : 'Không dịch được segment ' + ev.segment_id;
+        showToast('Dịch lỗi: ' + translationError, 'error');
+        break;
+      case 'tts.segment.audio':
+        enqueueTtsAudio(ev);
+        break;
+      case 'tts.segment.error':
+        var ttsError = ev.error && ev.error.message
+          ? ev.error.message
+          : 'Không synth được segment ' + ev.segment_id;
+        showToast('TTS lỗi: ' + ttsError, 'error');
+        break;
+      case 'transcription.done':
+        committedTranscript = ev.text || joinTranscript(
+          committedTranscript,
+          partialTranscript
+        );
+        partialTranscript = '';
+        renderTranscript();
+        flushTtsPlayback();
+        break;
+      case 'error':
+        var m = (ev.error && ev.error.message) ? ev.error.message : JSON.stringify(ev.error);
+        setStatus('error', 'Lỗi: ' + m);
+        showToast('Server: ' + m, 'error');
+        break;
+    }
+  }
+
+  function drainQueue() {
+    if (sending || !isConnected || !ws || ws.readyState !== WebSocket.OPEN || !audioQueue.length) return;
+    sending = true;
+    while (audioQueue.length && ws.bufferedAmount < MAX_WS_BUFFERED_BYTES) {
+      var chunk = audioQueue.shift();
+      ws.send(chunk);
+    }
+    sending = false;
+    if (audioQueue.length) {
+      clearTimeout(drainTimer);
+      drainTimer = setTimeout(drainQueue, 20);
+    }
+  }
+
+  function flushAudioQueue() {
+    clearTimeout(drainTimer);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      audioQueue = [];
+      return;
+    }
+    while (audioQueue.length) {
+      var chunk = audioQueue.shift();
+      ws.send(chunk);
+    }
+  }
+
+  /* ══════════════════════════════════════
+     RECORDING
+     ══════════════════════════════════════ */
+  function startRec() {
+    if (!isConnected) { showToast('Hãy kết nối STT trước!', 'error'); return; }
+
+    function doStart() {
+      isRecording = true;
+      startMicAudio().then(function() {
+        btnMic.classList.add('recording');
+        micSub.textContent = 'Đang nghe… Nhấn để dừng';
+        micSub.classList.add('recording');
+        setStatus('recording', 'Đang ghi âm');
+        liveDot.classList.add('active');
+      }).catch(function(e) {
+        isRecording = false;
+        showToast('Mic error: ' + e.message, 'error');
+      });
+    }
+
+    if (!micPermissionGranted) {
+      requestMicPermission().then(doStart).catch(function() {});
+    } else {
+      doStart();
+    }
+  }
+
+  function doStopRec() {
+    isRecording = false;
+    btnMic.classList.remove('recording');
+    micSub.textContent = 'Nhấn 🎤 hoặc Space để nói';
+    micSub.classList.remove('recording');
+    if (audioWorkletNode) audioWorkletNode.port.postMessage({ type: 'flush' });
+    setTimeout(function() {
+      stopMicAudio();
+      flushAudioQueue();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input_audio_buffer.commit', final: true }));
+      }
+    }, 50);
+    setStatus('connected', 'Đã kết nối');
+    liveDot.classList.remove('active');
+  }
+
+  /* ══════════════════════════════════════
+     EVENT LISTENERS
+     ══════════════════════════════════════ */
+  btnConnect.addEventListener('click', function() { doConnect('mic'); });
+  btnConnect.addEventListener('click', function() { ensureTtsAudioContext().catch(function() {}); });
+  btnStop.addEventListener('click', function() {
+    if (isRecording) {
+      doStopRec();
+      return;
+    }
+    isPlaying = false;
+    stopTtsPlayback();
+    if (ws) { ws.close(1000, 'User stopped'); ws = null; }
+    setStatus('idle', 'Đã dừng');
+    btnConnect.disabled = false; btnStop.disabled = true;
+    btnMic.disabled = true; btnMic.classList.remove('recording');
+    btnConnectFile.disabled = false; btnStopFile.disabled = true;
+    micSub.textContent = 'Kết nối STT trước';
+    btnConnectText.textContent = 'Kết nối STT';
+    btnConnectFileText.textContent = 'Kết nối STT';
+    liveDot.classList.remove('active');
+  });
+  btnMic.addEventListener('click', function() { if (isRecording) doStopRec(); else startRec(); });
+  btnClear.addEventListener('click', clearTranscript);
+  btnCopy.addEventListener('click', function() {
+    if (!transcriptEl.value) return showToast('Không có gì để copy');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(transcriptEl.value).then(function() { showToast('Đã sao chép!', 'success'); });
+    } else {
+      transcriptEl.select(); document.execCommand('copy'); showToast('Đã sao chép!', 'success');
+    }
+  });
+
+  // File mode buttons
+  btnConnectFile.addEventListener('click', function() { doConnect('file'); });
+  btnConnectFile.addEventListener('click', function() { ensureTtsAudioContext().catch(function() {}); });
+  btnStopFile.addEventListener('click', function() {
+    isPlaying = false;
+    stopTtsPlayback();
+    if (ws) { ws.close(1000, 'User stopped'); ws = null; }
+    setStatus('idle', 'Đã dừng');
+    btnConnectFile.disabled = false; btnStopFile.disabled = true;
+    btnConnectFileText.textContent = 'Kết nối STT';
+    liveDot.classList.remove('active');
+  });
+  btnClearFile.addEventListener('click', clearTranscript);
+  btnCopyFile.addEventListener('click', function() {
+    if (!transcriptEl.value) return showToast('Không có gì để copy');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(transcriptEl.value).then(function() { showToast('Đã sao chép!', 'success'); });
+    } else {
+      transcriptEl.select(); document.execCommand('copy'); showToast('Đã sao chép!', 'success');
+    }
+  });
+
+  transcriptEl.addEventListener('input', updateCount);
+  ttsEnabledEl.addEventListener('change', function() {
+    if (ttsEnabledEl.value !== 'true') {
+      stopTtsPlayback();
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    var tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.code === 'Space') { e.preventDefault(); if (currentMode === 'mic') btnMic.click(); }
+    if (e.code === 'KeyC' && e.ctrlKey) { e.preventDefault(); btnCopy.click(); }
+  });
+
+  /* ══════════════════════════════════════
+     INIT
+     ══════════════════════════════════════ */
+  setStatus('idle', 'Sẵn sàng');
+
+})();
+</script>
+</body>
+</html>
